@@ -21,6 +21,7 @@
     "@solana/kit": "^2.1.0",
     "@solana/rpc": "^2.1.0",
     "@solana/rpc-types": "^2.1.0",
+    "@solana/spl-token": "^0.4.13",
     "@solana/wallet-adapter-base": "^0.9.23",
     "@solana/wallet-adapter-react": "^0.15.35",
     "@solana/wallet-adapter-react-ui": "^0.9.35",
@@ -35,6 +36,7 @@
     "react-dom": "18.2.0",
     "react-dropzone": "^14.3.8",
     "react-hook-form": "^7.50.0",
+    "sonner": "^2.0.1",
     "tailwind-merge": "^3.0.2",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^3.22.4"
