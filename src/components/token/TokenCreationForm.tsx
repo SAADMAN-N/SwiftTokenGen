@@ -1,52 +1,53 @@
 'use client';
 
 import { useState } from 'react';
-
-interface TokenFormData {
-  name: string;
-  symbol: string;
-  decimals: number;
-  supply: string;
-}
+import { tokenFormSchema, type TokenFormData } from '@/lib/validation/tokenSchema';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
 
 export function TokenCreationForm() {
-  const [formData, setFormData] = useState<TokenFormData>({
-    name: '',
-    symbol: '',
-    decimals: 9, // Default for most Solana tokens
-    supply: '',
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+    watch,
+  } = useForm<TokenFormData>({
+    resolver: zodResolver(tokenFormSchema),
+    defaultValues: {
+      name: '',
+      symbol: '',
+      decimals: 9,
+      supply: '',
+    },
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // Will implement token creation logic in Phase 3
-    console.log('Form submitted:', formData);
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+  const onSubmit = async (data: TokenFormData) => {
+    try {
+      // Will implement token creation logic in Phase 3
+      console.log('Validated form data:', data);
+    } catch (error) {
+      console.error('Form submission error:', error);
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-md mx-auto space-y-6 p-6">
+    <form onSubmit={handleSubmit(onSubmit)} className="max-w-md mx-auto space-y-6 p-6">
       <div className="space-y-2">
         <label htmlFor="name" className="block text-sm font-medium text-gray-200">
           Token Name
         </label>
         <input
+          {...register('name')}
           type="text"
           id="name"
-          name="name"
-          value={formData.name}
-          onChange={handleChange}
           placeholder="My Token"
-          className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500"
-          required
+          className={`w-full px-3 py-2 bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+            errors.name ? 'border-red-500' : 'border-gray-700'
+          }`}
         />
+        {errors.name && (
+          <p className="text-sm text-red-500">{errors.name.message}</p>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -54,16 +55,17 @@ export function TokenCreationForm() {
           Token Symbol
         </label>
         <input
+          {...register('symbol')}
           type="text"
           id="symbol"
-          name="symbol"
-          value={formData.symbol}
-          onChange={handleChange}
           placeholder="TKN"
-          className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500"
-          required
-          maxLength={11}
+          className={`w-full px-3 py-2 bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+            errors.symbol ? 'border-red-500' : 'border-gray-700'
+          }`}
         />
+        {errors.symbol && (
+          <p className="text-sm text-red-500">{errors.symbol.message}</p>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -71,11 +73,11 @@ export function TokenCreationForm() {
           Decimals
         </label>
         <select
+          {...register('decimals', { valueAsNumber: true })}
           id="decimals"
-          name="decimals"
-          value={formData.decimals}
-          onChange={handleChange}
-          className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500"
+          className={`w-full px-3 py-2 bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+            errors.decimals ? 'border-red-500' : 'border-gray-700'
+          }`}
         >
           {[0, 2, 4, 6, 8, 9].map(decimal => (
             <option key={decimal} value={decimal}>
@@ -83,6 +85,9 @@ export function TokenCreationForm() {
             </option>
           ))}
         </select>
+        {errors.decimals && (
+          <p className="text-sm text-red-500">{errors.decimals.message}</p>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -90,23 +95,25 @@ export function TokenCreationForm() {
           Initial Supply
         </label>
         <input
-          type="number"
+          {...register('supply')}
+          type="text"
           id="supply"
-          name="supply"
-          value={formData.supply}
-          onChange={handleChange}
           placeholder="1000000"
-          className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500"
-          required
-          min="0"
+          className={`w-full px-3 py-2 bg-gray-800 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+            errors.supply ? 'border-red-500' : 'border-gray-700'
+          }`}
         />
+        {errors.supply && (
+          <p className="text-sm text-red-500">{errors.supply.message}</p>
+        )}
       </div>
 
       <button
         type="submit"
-        className="w-full px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500"
+        disabled={isSubmitting}
+        className="w-full px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
       >
-        Create Token
+        {isSubmitting ? 'Creating...' : 'Create Token'}
       </button>
     </form>
   );
