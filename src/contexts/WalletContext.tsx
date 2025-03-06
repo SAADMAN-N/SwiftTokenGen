@@ -1,50 +1,35 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
-import { type Address } from '@solana/kit';
+import { FC, ReactNode, useMemo } from 'react';
+import { ConnectionProvider, WalletProvider as SolanaWalletProvider } from '@solana/wallet-adapter-react';
+import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-wallets';
+import { clusterApiUrl } from '@solana/web3.js';
 
-interface WalletContextType {
-  connected: boolean;
-  connecting: boolean;
-  walletAddress: Address | null;
-  connect: () => Promise<void>;
-  disconnect: () => Promise<void>;
+// Import wallet adapter CSS
+require('@solana/wallet-adapter-react-ui/styles.css');
+
+interface Props {
+  children: ReactNode;
 }
 
-const WalletContext = createContext<WalletContextType | undefined>(undefined);
+export const WalletProvider: FC<Props> = ({ children }) => {
+  // You can also provide a custom RPC endpoint
+  const endpoint = useMemo(() => clusterApiUrl('devnet'), []);
 
-export function WalletProvider({ children }: { children: React.ReactNode }) {
-  const [connected, setConnected] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [walletAddress, setWalletAddress] = useState<Address | null>(null);
-
-  const connect = async () => {
-    // Implementation will be added in next step
-  };
-
-  const disconnect = async () => {
-    // Implementation will be added in next step
-  };
+  // Initialize wallets
+  const wallets = useMemo(
+    () => [
+      new PhantomWalletAdapter(),
+    ],
+    []
+  );
 
   return (
-    <WalletContext.Provider
-      value={{
-        connected,
-        connecting,
-        walletAddress,
-        connect,
-        disconnect,
-      }}
-    >
-      {children}
-    </WalletContext.Provider>
+    <ConnectionProvider endpoint={endpoint}>
+      <SolanaWalletProvider wallets={wallets} autoConnect>
+        <WalletModalProvider>{children}</WalletModalProvider>
+      </SolanaWalletProvider>
+    </ConnectionProvider>
   );
-}
-
-export function useWallet() {
-  const context = useContext(WalletContext);
-  if (context === undefined) {
-    throw new Error('useWallet must be used within a WalletProvider');
-  }
-  return context;
-}
+};

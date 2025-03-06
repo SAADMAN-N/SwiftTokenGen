@@ -1,13 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { ClientLayout } from "@/components/layout";
 
 const inter = Inter({
   subsets: ["latin"],
 });
 
 export const viewport: Viewport = {
-  themeColor: "#0F172A", // matches our background color
+  themeColor: "#0F172A",
   colorScheme: 'dark'
 };
 
@@ -45,12 +46,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="en" className={inter.className} suppressHydrationWarning>
-      <body className="bg-background text-text">{children}</body>
+    <html lang="en" className={inter.className}>
+      <body>
+        <ClientLayout>{children}</ClientLayout>
+      </body>
     </html>
   );
 }

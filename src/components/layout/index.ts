@@ -1,1 +1,1 @@
-// Export layout components
+export { ClientLayout } from './ClientLayout';
