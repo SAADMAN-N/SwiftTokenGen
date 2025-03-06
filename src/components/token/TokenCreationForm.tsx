@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { tokenFormSchema, type TokenFormData } from '@/lib/validation/tokenSchema';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -10,7 +9,6 @@ export function TokenCreationForm() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-    watch,
   } = useForm<TokenFormData>({
     resolver: zodResolver(tokenFormSchema),
     defaultValues: {
