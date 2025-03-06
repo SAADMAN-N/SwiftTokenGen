@@ -1,10 +1,18 @@
+import { TokenCreationForm } from '@/components/token/TokenCreationForm';
+import { PricingCalculator } from '@/components/ui/PricingCalculator';
+
 export default function HomePage() {
   return (
-    <main className="container-main py-8">
-      <h1 className="text-4xl font-bold mb-4">Create Your Solana Token</h1>
-      <div className="card">
-        <p>Welcome to SwiftToken - The cheapest Solana token creator</p>
+    <div className="container mx-auto py-8">
+      <h1 className="text-3xl font-bold text-center mb-8">Create Your Solana Token</h1>
+      
+      {/* Pricing Calculator */}
+      <div className="mb-12">
+        <PricingCalculator />
       </div>
-    </main>
+
+      {/* Token Creation Form */}
+      <TokenCreationForm />
+    </div>
   );
 }
