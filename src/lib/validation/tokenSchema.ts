@@ -7,44 +7,37 @@ const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png'];
 
 export const tokenFormSchema = z.object({
   name: z.string()
-    .min(2, 'Token name must be at least 2 characters')
-    .max(50, 'Token name cannot exceed 50 characters'),
+    .min(1, 'Token name is required')
+    .max(32, 'Token name must be 32 characters or less'),
   symbol: z.string()
-    .min(2, 'Symbol must be at least 2 characters')
-    .max(10, 'Symbol cannot exceed 10 characters')
-    .toUpperCase(),
+    .min(1, 'Token symbol is required')
+    .max(10, 'Token symbol must be 10 characters or less'),
   decimals: z.number()
-    .int()
-    .min(0, 'Decimals must be at least 0')
-    .max(9, 'Decimals cannot exceed 9'),
+    .min(0)
+    .max(9),
   supply: z.string()
-    .min(1, 'Supply is required')
-    .regex(/^\d+$/, 'Supply must be a valid number'),
+    .min(1, 'Initial supply is required'),
   description: z.string()
-    .max(500, 'Description cannot exceed 500 characters')
+    .max(1000, 'Description must be 1000 characters or less')
     .optional(),
   creatorName: z.string()
-    .max(100, 'Creator name cannot exceed 100 characters')
-    .optional(),
+    .min(1, 'Creator name is required'),
   creatorEmail: z.string()
-    .email('Invalid email address')
-    .optional(),
+    .email('Invalid email address'),
   website: z.string()
-    .url('Invalid website URL')
+    .url('Invalid URL')
     .optional(),
   twitter: z.string()
-    .url('Invalid Twitter URL')
+    .url('Invalid URL')
     .optional(),
   telegram: z.string()
-    .url('Invalid Telegram URL')
+    .url('Invalid URL')
     .optional(),
   discord: z.string()
-    .url('Invalid Discord URL')
+    .url('Invalid URL')
     .optional(),
-  tags: z.array(z.string())
-    .max(5, 'Cannot add more than 5 tags')
-    .optional(),
-  logoFile: z.instanceof(File, { message: "Logo is required" })
+  tags: z.array(z.string()),
+  logoFile: z.instanceof(File)
     .refine(
       (file) => file.size <= MAX_FILE_SIZE,
       'Max file size is 5MB'
@@ -54,6 +47,11 @@ export const tokenFormSchema = z.object({
       'Only .jpg and .png formats are supported'
     )
     .optional(),
+  
+  // New authority fields
+  freezeAuthority: z.boolean().default(false),
+  mintAuthority: z.boolean().default(false),
+  updateAuthority: z.boolean().default(false),
 });
 
 export type TokenFormData = z.infer<typeof tokenFormSchema>;
