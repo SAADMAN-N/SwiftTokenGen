@@ -12,7 +12,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { TestRpcConnection } from '@/components/TestRpcConnection';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Connection } from '@solana/web3.js';
-import { createToken, NetworkType } from '@/lib/solana/token';
+import { createToken, NetworkType, testRpcConnection } from '@/lib/solana/token';
 import { processPayment } from '@/lib/solana/payment';
 import { toast } from "sonner"
 import type { TokenConfig } from '@/types';
@@ -134,14 +134,25 @@ export function TokenCreationForm() {
         return;
       }
 
+      // Verify wallet capabilities
+      if (!walletContext.signTransaction) {
+        toast.error("Your wallet doesn't support transaction signing. Please use a different wallet.");
+        return;
+      }
+
       setIsCreating(true);
       const connection = new Connection(env.RPC_URL, 'confirmed');
       
-      // 1. Calculate price and process payment
-      const priceInSol = 0.1;
-      const paymentResult = await processPayment(walletContext, priceInSol, connection);
+      // Test RPC connection first
+      const isConnected = await testRpcConnection(connection);
+      if (!isConnected) {
+        throw new Error('Failed to connect to Solana network. Please try again later.');
+      }
+
+      // Process payment with better error handling
+      const paymentResult = await processPayment(walletContext, 0.1, connection);
       if (!paymentResult.success || !paymentResult.signature) {
-        throw new Error('Payment failed');
+        throw new Error('Payment processing failed. Please try again.');
       }
 
       // 2. Create token configuration
@@ -250,7 +261,18 @@ export function TokenCreationForm() {
 
     } catch (error) {
       console.error('Token creation error:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to create token');
+      
+      // More specific error messages
+      let errorMessage = 'Failed to create token';
+      if (error.message.includes('Wallet signing failed')) {
+        errorMessage = 'Please unlock your wallet and try again';
+      } else if (error.message.includes('insufficient funds')) {
+        errorMessage = 'Insufficient funds in your wallet';
+      } else if (error.message.includes('Failed to connect')) {
+        errorMessage = 'Network connection error. Please try again later';
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setIsCreating(false);
     }
