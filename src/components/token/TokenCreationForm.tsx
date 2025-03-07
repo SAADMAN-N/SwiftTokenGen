@@ -14,6 +14,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { Connection } from '@solana/web3.js';
 import { getMinimumBalanceForRentExemptMint } from '@solana/spl-token';
 import { createToken } from '@/lib/solana/token';
+import { processPayment } from '@/lib/solana/payment';
 import { toast } from "sonner"
 import type { TokenConfig } from '@/types';
 
@@ -189,6 +190,16 @@ export function TokenCreationForm() {
       setIsCreating(true);
       console.log('Starting token creation process...');
 
+      // 1. First calculate price
+      const priceInSol = 0.1; // Your pricing logic here
+
+      // 2. Process payment first
+      const paymentResult = await processPayment(walletContext, priceInSol, connection);
+      if (!paymentResult.success || !paymentResult.signature) {
+        throw new Error('Payment failed');
+      }
+
+      // 3. Only if payment is successful, create the token
       const tokenConfig: TokenConfig = {
         name: data.name.trim(),
         symbol: data.symbol.trim().toUpperCase(),
@@ -209,6 +220,39 @@ export function TokenCreationForm() {
       );
 
       console.log('Token creation successful:', result);
+
+      // 4. Save to database with completed payment status
+      const memecoinData = {
+        name: tokenConfig.name,
+        symbol: tokenConfig.symbol,
+        decimals: tokenConfig.decimals,
+        totalSupply: tokenConfig.supply,
+        mintAddress: result.mintAddress,
+        creatorAddress: walletContext.publicKey.toString(),
+        priceInSol: priceInSol,
+        hasMintAuthority: tokenConfig.mintAuthority,
+        hasFreezeAuthority: tokenConfig.freezeAuthority,
+        hasUpdateAuthority: tokenConfig.updateAuthority,
+        network: env.NETWORK || 'devnet',
+        paymentStatus: 'completed', // Ensure this is being set
+        paymentTx: paymentResult.signature // Ensure this is being set
+      };
+
+      const dbResponse = await fetch('/api/memecoins', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(memecoinData),
+      });
+
+      if (!dbResponse.ok) {
+        const errorData = await dbResponse.json();
+        throw new Error(`Failed to save token to database: ${JSON.stringify(errorData)}`);
+      }
+
+      // Log the response to verify
+      console.log('Database update response:', await dbResponse.json());
 
       const successData: TokenCreationSuccess = {
         signature: result.signature,

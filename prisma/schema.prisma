@@ -1,0 +1,42 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Memecoin {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name        String
+  symbol      String
+  decimals    Int
+  totalSupply String // Using String for large numbers
+  description String?
+  logoUrl     String?
+  socialLinks Json? // Stores social media links
+
+  // Blockchain Data
+  mintAddress    String @unique
+  creatorAddress String
+  network        String @default("devnet")
+
+  // Authority Settings
+  hasMintAuthority   Boolean @default(true)
+  hasFreezeAuthority Boolean @default(true)
+  hasUpdateAuthority Boolean @default(true)
+
+  // Payment Info
+  priceInSol    Decimal
+  paymentStatus String  @default("pending")
+  paymentTx     String?
+
+  @@map("memecoins")
+}
