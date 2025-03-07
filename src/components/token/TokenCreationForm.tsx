@@ -149,8 +149,8 @@ export function TokenCreationForm() {
         throw new Error('Failed to connect to Solana network. Please try again later.');
       }
 
-      // Process payment with better error handling
-      const paymentResult = await processPayment(walletContext, 0.1, connection);
+      // Update payment amount to promotional price
+      const paymentResult = await processPayment(walletContext, 0.2, connection);
       if (!paymentResult.success || !paymentResult.signature) {
         throw new Error('Payment processing failed. Please try again.');
       }

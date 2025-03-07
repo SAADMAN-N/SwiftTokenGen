@@ -30,15 +30,37 @@ export interface TokenCreationResult {
 
 const CONFIRMATION_COMMITMENT = 'confirmed';
 
+async function retryWithBackoff<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 1000
+): Promise<T> {
+  let currentTry = 0;
+  
+  while (currentTry < maxRetries) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error.message.includes('429') && currentTry < maxRetries - 1) {
+        const delay = initialDelay * Math.pow(2, currentTry);
+        console.log(`RPC rate limited. Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        currentTry++;
+      } else {
+        throw error;
+      }
+    }
+  }
+  
+  throw new Error('Max retries exceeded');
+}
+
 export async function testRpcConnection(connection: Connection): Promise<boolean> {
-  try {
+  return retryWithBackoff(async () => {
     const latestBlockhash = await connection.getLatestBlockhash();
     console.log('Connection to cluster established. Latest blockhash:', latestBlockhash.blockhash);
     return true;
-  } catch (error) {
-    console.error('Failed to connect to Solana cluster:', error);
-    return false;
-  }
+  });
 }
 
 export async function createToken(
