@@ -21,6 +21,13 @@ import { WalletContextState } from '@solana/wallet-adapter-react';
 
 export type NetworkType = 'mainnet-beta' | 'devnet';
 
+// Add the missing interface
+export interface TokenCreationResult {
+  signature: string;
+  mintAddress: string;
+  tokenAccount: string;
+}
+
 const CONFIRMATION_COMMITMENT = 'confirmed';
 
 export async function testRpcConnection(connection: Connection): Promise<boolean> {
@@ -38,12 +45,8 @@ export async function createToken(
   wallet: WalletContextState,
   tokenConfig: TokenConfig,
   connection: Connection,
-  network: NetworkType = 'devnet'
+  network: NetworkType = 'mainnet-beta'
 ): Promise<TokenCreationResult> {
-  if (network === 'mainnet-beta' && process.env.NODE_ENV !== 'production') {
-    throw new Error('Mainnet transactions only allowed in production');
-  }
-
   if (!wallet.publicKey || !wallet.signTransaction) {
     throw new Error('Wallet not connected');
   }

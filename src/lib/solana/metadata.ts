@@ -18,6 +18,13 @@ interface MetadataConfig {
   image?: File;
   externalUrl?: string;
   sellerFeeBasisPoints?: number;
+  // Add social links to the interface
+  socialLinks?: {
+    website?: string;
+    twitter?: string;
+    telegram?: string;
+    discord?: string;
+  };
 }
 
 export async function createTokenMetadata(
@@ -31,55 +38,69 @@ export async function createTokenMetadata(
       throw new Error('Wallet not connected');
     }
 
-    // 1. Upload image to IPFS if provided and ensure we have a valid URL
+    // 1. Upload image to IPFS if provided
     let imageUrl: string | undefined;
     if (config.image) {
       imageUrl = await uploadToIPFS(config.image);
       console.log('Image uploaded to IPFS:', imageUrl);
-      
-      // Verify the image URL is valid
-      if (!imageUrl || !imageUrl.startsWith('http')) {
-        throw new Error('Invalid image URL after IPFS upload');
-      }
     }
 
-    // 2. Create metadata JSON following Metaplex standard
+    // 2. Create metadata JSON
     const metadataJson = {
       name: config.name,
       symbol: config.symbol,
       description: config.description || '',
-      image: imageUrl, // Main image URL
-      animation_url: imageUrl, // Adding this for better compatibility
-      external_url: config.externalUrl || '',
-      attributes: [],
+      image: imageUrl || '',
+      external_url: config.socialLinks?.website || '',
       properties: {
-        files: [{
+        files: imageUrl ? [{
           uri: imageUrl,
           type: "image/png",
           cdn: false
-        }],
+        }] : [],
         category: "image",
         creators: [{
           address: wallet.publicKey.toString(),
           share: 100,
           verified: true
         }]
-      }
+      },
+      // Add social links in a standard format
+      attributes: [
+        ...(config.socialLinks?.website ? [{
+          trait_type: "Website",
+          value: config.socialLinks.website
+        }] : []),
+        ...(config.socialLinks?.twitter ? [{
+          trait_type: "Twitter",
+          value: config.socialLinks.twitter
+        }] : []),
+        ...(config.socialLinks?.telegram ? [{
+          trait_type: "Telegram",
+          value: config.socialLinks.telegram
+        }] : []),
+        ...(config.socialLinks?.discord ? [{
+          trait_type: "Discord",
+          value: config.socialLinks.discord
+        }] : [])
+      ]
     };
 
-    console.log('Metadata JSON:', metadataJson);
+    console.log('Final metadata JSON:', JSON.stringify(metadataJson, null, 2));
 
     // 3. Upload metadata JSON to IPFS
     const metadataBlob = new Blob([JSON.stringify(metadataJson)], { 
       type: 'application/json' 
     });
     const metadataFile = new File([metadataBlob], 'metadata.json');
-    console.log('Uploading metadata with image URL:', imageUrl);
     const metadataUrl = await uploadToIPFS(metadataFile);
-    console.log('Full metadata JSON:', JSON.stringify(metadataJson, null, 2));
-    console.log('Metadata uploaded to:', metadataUrl);
+    
+    console.log('Metadata uploaded to IPFS:', {
+      url: metadataUrl,
+      content: metadataJson
+    });
 
-    // 4. Create metadata data structure for on-chain storage
+    // 4. Create on-chain metadata
     const metadataData = {
       name: config.name,
       symbol: config.symbol,

@@ -1,19 +1,29 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { WalletProvider } from '@/contexts/WalletContext';
-import { WalletConnectButton } from '@/components/WalletConnectButton';
-import { ReactNode } from 'react';
 import '@solana/wallet-adapter-react-ui/styles.css';
 
-export function ClientLayout({ children }: { children: ReactNode }) {
+const WalletMultiButton = dynamic(
+  async () => (await import('@solana/wallet-adapter-react-ui')).WalletMultiButton,
+  { ssr: false }
+);
+
+export function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
     <WalletProvider>
-      <header className="fixed top-0 left-0 right-0 bg-gray-900/80 backdrop-blur-sm border-b border-gray-800 z-50">
-        <WalletConnectButton />
-      </header>
-      <main className="pt-16">
-        {children}
-      </main>
+      <div className="min-h-screen flex flex-col">
+        <header className="w-full border-b border-gray-800">
+          <div className="container mx-auto px-4">
+            <div className="h-16 flex items-center justify-end">
+              <WalletMultiButton className="!bg-[#512da8] hover:!bg-[#512da8]/80" />
+            </div>
+          </div>
+        </header>
+        <main className="flex-1">
+          {children}
+        </main>
+      </div>
     </WalletProvider>
   );
 }

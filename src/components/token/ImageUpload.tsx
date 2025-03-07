@@ -3,14 +3,26 @@
 import Image from 'next/image';
 import { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
+import { FieldError, Merge, FieldErrorsImpl } from 'react-hook-form';
+
+type ErrorType = string | FieldError | Merge<FieldError, FieldErrorsImpl<any>> | undefined;
 
 interface ImageUploadProps {
   onImageSelect: (file: File) => void;
-  error?: string;
+  error?: ErrorType;
 }
 
 export function ImageUpload({ onImageSelect, error }: ImageUploadProps) {
   const [preview, setPreview] = useState<string | null>(null);
+
+  // Convert error to string, ensuring we always get a string or undefined
+  const errorMessage: string | undefined = error 
+    ? typeof error === 'string' 
+      ? error 
+      : 'message' in error 
+        ? String(error.message)  // Explicitly convert to string
+        : undefined
+    : undefined;
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -46,7 +58,7 @@ export function ImageUpload({ onImageSelect, error }: ImageUploadProps) {
         {...getRootProps()}
         className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors
           ${isDragActive ? 'border-blue-500 bg-blue-50/5' : 'border-gray-700'}
-          ${error ? 'border-red-500' : ''}
+          ${errorMessage ? 'border-red-500' : ''}
         `}
       >
         <input {...getInputProps()} />
@@ -72,7 +84,7 @@ export function ImageUpload({ onImageSelect, error }: ImageUploadProps) {
           </div>
         )}
       </div>
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
     </div>
   );
 }

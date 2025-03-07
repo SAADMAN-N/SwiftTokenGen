@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
 
@@ -57,7 +58,6 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
-    // Test database connection first
     await prisma.$connect();
     
     const memecoins = await prisma.memecoin.findMany({
@@ -78,30 +78,33 @@ export async function GET() {
 
     return NextResponse.json(memecoins);
   } catch (error) {
-    // Log the actual error details
-    console.error('Detailed database error:', {
-      name: error.name,
-      message: error.message,
-      code: error.code,
-      stack: error.stack
-    });
+    // Type guard for error object
+    const errorDetails = {
+      name: error instanceof Error ? error.name : 'Unknown Error',
+      message: error instanceof Error ? error.message : 'An unknown error occurred',
+      code: error instanceof Prisma.PrismaClientKnownRequestError ? error.code : 'UNKNOWN',
+      stack: error instanceof Error ? error.stack : undefined
+    };
+
+    // Log the error details
+    console.error('Detailed database error:', errorDetails);
 
     if (error instanceof Prisma.PrismaClientInitializationError) {
       return NextResponse.json(
-        { error: `Database connection failed: ${error.message}` },
+        { error: `Database connection failed: ${errorDetails.message}` },
         { status: 500 }
       );
     }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       return NextResponse.json(
-        { error: `Database query failed: ${error.message}` },
+        { error: `Database query failed: ${errorDetails.message}` },
         { status: 500 }
       );
     }
 
     return NextResponse.json(
-      { error: `Internal server error: ${error.message}` },
+      { error: `Internal server error: ${errorDetails.message}` },
       { status: 500 }
     );
   } finally {

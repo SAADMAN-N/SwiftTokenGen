@@ -12,8 +12,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { TestRpcConnection } from '@/components/TestRpcConnection';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Connection } from '@solana/web3.js';
-import { getMinimumBalanceForRentExemptMint } from '@solana/spl-token';
-import { createToken } from '@/lib/solana/token';
+import { createToken, NetworkType } from '@/lib/solana/token';
 import { processPayment } from '@/lib/solana/payment';
 import { toast } from "sonner"
 import type { TokenConfig } from '@/types';
@@ -28,8 +27,8 @@ interface TokenCreationSuccess {
   config: TokenConfig;
 }
 
-const DEFAULT_RPC_URL = "https://api.devnet.solana.com";
-const DEFAULT_NETWORK = "devnet";
+const DEFAULT_RPC_URL = "https://api.mainnet-beta.solana.com";
+const DEFAULT_NETWORK = "mainnet-beta";
 
 const REQUIRED_ENV_VARS = {
   RPC_URL: process.env.NEXT_PUBLIC_RPC_URL || DEFAULT_RPC_URL,
@@ -89,7 +88,7 @@ export function TokenCreationForm() {
       name: '',
       symbol: '',
       decimals: 9,
-      supply: '',
+      supply: 0, // Set as number
       description: '',
       creatorName: '',
       creatorEmail: '',
@@ -104,18 +103,6 @@ export function TokenCreationForm() {
       updateAuthority: false,
     }
   });
-
-  // Add this debug function
-  const debugSubmit = async (data: TokenFormData) => {
-    console.log('Form submitted with data:', data);
-    console.log('Validation errors:', errors);
-    
-    try {
-      await onSubmit(data);
-    } catch (error) {
-      console.error('Submit error:', error);
-    }
-  };
 
   const handleAddTag = () => {
     if (newTag && tags.length < 5 && !tags.includes(newTag)) {
@@ -161,8 +148,8 @@ export function TokenCreationForm() {
       const tokenConfig: TokenConfig = {
         name: data.name.trim(),
         symbol: data.symbol.trim().toUpperCase(),
-        decimals: Number(data.decimals),
-        supply: data.supply,
+        decimals: data.decimals, // Should now be a number from the schema
+        supply: data.supply, // Should now be a number from the schema
         freezeAuthority: Boolean(data.freezeAuthority),
         mintAuthority: Boolean(data.mintAuthority),
         updateAuthority: Boolean(data.updateAuthority)
@@ -181,18 +168,24 @@ export function TokenCreationForm() {
         const mintAddress = new PublicKey(result.mintAddress);
         console.log('Creating metadata for mint:', mintAddress.toString());
         
+        const metadataConfig = {
+          name: data.name,
+          symbol: data.symbol,
+          description: data.description,
+          image: data.logoFile,
+          socialLinks: {
+            website: data.website || undefined,
+            twitter: data.twitter || undefined,
+            telegram: data.telegram || undefined,
+            discord: data.discord || undefined
+          }
+        };
+
         await createTokenMetadata(
           connection,
           walletContext,
           mintAddress,
-          {
-            name: data.name.trim(),
-            symbol: data.symbol.trim().toUpperCase(),
-            description: data.description || '',
-            image: data.logoFile,
-            externalUrl: data.website || '',
-            sellerFeeBasisPoints: 0,
-          }
+          metadataConfig
         );
         
         console.log('Metadata creation successful');
@@ -358,7 +351,7 @@ export function TokenCreationForm() {
                 </label>
                 <ImageUpload
                   onImageSelect={handleImageSelect}
-                  error={errors.logoFile?.message}
+                  error={errors.logoFile?.message || undefined}
                 />
               </div>
 

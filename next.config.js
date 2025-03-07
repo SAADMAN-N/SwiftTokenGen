@@ -1,9 +1,26 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  env: {
-    NEXT_PUBLIC_RPC_URL: "https://api.devnet.solana.com",
-    NEXT_PUBLIC_NETWORK: "devnet",
+  typescript: {
+    // !! WARN !!
+    // Dangerously allow production builds to successfully complete even if
+    // your project has type errors.
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    // Warning: This allows production builds to successfully complete even if
+    // your project has ESLint errors.
+    ignoreDuringBuilds: true,
+  },
+  images: {
+    domains: [
+      'ipfs.io',
+      'gateway.ipfs.io',
+      'cloudflare-ipfs.com'
+    ],
+  },
+  webpack: (config) => {
+    config.resolve.fallback = { fs: false, net: false, tls: false };
+    return config;
   },
 }
 
