@@ -21,43 +21,17 @@ import { WalletContextState } from '@solana/wallet-adapter-react';
 
 export type NetworkType = 'mainnet-beta' | 'devnet';
 
-export async function testRpcConnection(endpoint: string): Promise<boolean> {
-  try {
-    const connection = new Connection(endpoint, 'confirmed');
-    const blockHeight = await connection.getBlockHeight();
-    return blockHeight > 0;
-  } catch (error: unknown) {
-    console.error('RPC connection test failed:', error);
-    return false;
-  }
-}
+const CONFIRMATION_COMMITMENT = 'confirmed';
 
-export async function testTokenCreation(tokenConfig: TokenConfig): Promise<boolean> {
+export async function testRpcConnection(connection: Connection): Promise<boolean> {
   try {
-    // Create a test connection to devnet
-    const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
-    
-    // Create a test wallet
-    const testWallet = Keypair.generate();
-    
-    // Try to build the transaction - if this succeeds, the config is valid
-    await buildTokenCreateTransaction(
-      testWallet.publicKey,
-      tokenConfig,
-      connection
-    );
-
+    const latestBlockhash = await connection.getLatestBlockhash();
+    console.log('Connection to cluster established. Latest blockhash:', latestBlockhash.blockhash);
     return true;
-  } catch (error: unknown) {
-    console.error('Token creation test failed:', error);
+  } catch (error) {
+    console.error('Failed to connect to Solana cluster:', error);
     return false;
   }
-}
-
-export interface TokenCreationResult {
-  signature: TransactionSignature;
-  mintAddress: string;
-  tokenAccount: string;
 }
 
 export async function createToken(
@@ -66,7 +40,6 @@ export async function createToken(
   connection: Connection,
   network: NetworkType = 'devnet'
 ): Promise<TokenCreationResult> {
-  // Validate network
   if (network === 'mainnet-beta' && process.env.NODE_ENV !== 'production') {
     throw new Error('Mainnet transactions only allowed in production');
   }
@@ -110,7 +83,7 @@ export async function createToken(
       )
     );
 
-    // 5. Get latest blockhash and set fee payer
+    // 5. Get fresh blockhash
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = wallet.publicKey;
@@ -122,14 +95,18 @@ export async function createToken(
     const signedTx = await wallet.signTransaction(transaction);
 
     // 8. Send and confirm transaction
-    const signature = await connection.sendRawTransaction(signedTx.serialize());
+    const signature = await connection.sendRawTransaction(signedTx.serialize(), {
+      skipPreflight: false,
+      preflightCommitment: CONFIRMATION_COMMITMENT,
+      maxRetries: 3,
+    });
     
-    // 9. Wait for confirmation with timeout and retry logic
+    // 9. Wait for confirmation
     const confirmation = await connection.confirmTransaction({
       signature,
       blockhash,
       lastValidBlockHeight
-    }, 'confirmed');
+    }, CONFIRMATION_COMMITMENT);
 
     if (confirmation.value.err) {
       throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);

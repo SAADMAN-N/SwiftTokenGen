@@ -3,6 +3,7 @@
 import { testRpcConnection } from '@/lib/solana/token';
 import { env } from '@/config/env';
 import { useEffect, useState } from 'react';
+import { Connection } from '@solana/web3.js';
 
 export function TestRpcConnection() {
   const [connectionStatus, setConnectionStatus] = useState<'testing' | 'success' | 'failed'>('testing');
@@ -10,7 +11,8 @@ export function TestRpcConnection() {
   useEffect(() => {
     const testConnection = async () => {
       console.log('Starting connection test with endpoint:', env.solana.rpcEndpoint);
-      const result = await testRpcConnection(env.solana.rpcEndpoint);
+      const connection = new Connection(env.solana.rpcEndpoint, 'confirmed');
+      const result = await testRpcConnection(connection);
       console.log('Connection test result:', result);
       setConnectionStatus(result ? 'success' : 'failed');
     };

@@ -17,6 +17,9 @@ import { createToken } from '@/lib/solana/token';
 import { processPayment } from '@/lib/solana/payment';
 import { toast } from "sonner"
 import type { TokenConfig } from '@/types';
+import { PublicKey } from '@solana/web3.js';
+import { createTokenMetadata } from '@/lib/solana/metadata';
+import { uploadToIPFS } from '@/lib/ipfs';
 
 interface TokenCreationSuccess {
   signature: string;
@@ -136,82 +139,36 @@ export function TokenCreationForm() {
   const onSubmit = async (data: TokenFormData) => {
     try {
       console.log('Starting form submission...');
-      console.log('Current environment state:', {
-        env: process.env,
-        required: REQUIRED_ENV_VARS,
-      });
-
-      // Validate environment variables first
-      console.log('Validating environment variables...');
-      console.log('Current env vars:', {
-        RPC_URL: process.env.NEXT_PUBLIC_RPC_URL,
-        NETWORK: process.env.NEXT_PUBLIC_NETWORK,
-      });
-
+      
       const env = validateEnvironment();
       
-      // Log the full form data
-      console.log('Form Data Received:', {
-        ...data,
-        supply: typeof data.supply,
-        decimals: typeof data.decimals
-      });
-
-      // Validate required fields
-      if (!data.name || !data.symbol || !data.supply) {
-        toast.error("Please fill in all required fields");
-        console.log('Validation failed - missing required fields');
-        return;
-      }
-
-      // Validate wallet connection
       if (!walletContext.connected || !walletContext.publicKey) {
         toast.error("Please connect your wallet to create a token");
-        console.log('Validation failed - wallet not connected');
         return;
       }
 
-      // Create connection with validated RPC URL
-      console.log('Connecting to RPC URL:', env.RPC_URL);
-      const connection = new Connection(env.RPC_URL, 'confirmed');
-
-      // Check balance
-      const balance = await connection.getBalance(walletContext.publicKey);
-      const minimumBalance = await getMinimumBalanceForRentExemptMint(connection);
-      console.log('Balance check:', { balance, minimumBalance });
-
-      if (balance < minimumBalance) {
-        toast.error("Insufficient balance for token creation");
-        console.log('Validation failed - insufficient balance');
-        return;
-      }
-
-      // Proceed with token creation
       setIsCreating(true);
-      console.log('Starting token creation process...');
-
-      // 1. First calculate price
-      const priceInSol = 0.1; // Your pricing logic here
-
-      // 2. Process payment first
+      const connection = new Connection(env.RPC_URL, 'confirmed');
+      
+      // 1. Calculate price and process payment
+      const priceInSol = 0.1;
       const paymentResult = await processPayment(walletContext, priceInSol, connection);
       if (!paymentResult.success || !paymentResult.signature) {
         throw new Error('Payment failed');
       }
 
-      // 3. Only if payment is successful, create the token
+      // 2. Create token configuration
       const tokenConfig: TokenConfig = {
         name: data.name.trim(),
         symbol: data.symbol.trim().toUpperCase(),
         decimals: Number(data.decimals),
         supply: data.supply,
-        freezeAuthority: data.freezeAuthority,
-        mintAuthority: data.mintAuthority,
-        updateAuthority: data.updateAuthority
+        freezeAuthority: Boolean(data.freezeAuthority),
+        mintAuthority: Boolean(data.mintAuthority),
+        updateAuthority: Boolean(data.updateAuthority)
       };
 
-      console.log('Token configuration:', tokenConfig);
-
+      // 3. Create token
       const result = await createToken(
         walletContext,
         tokenConfig,
@@ -219,25 +176,58 @@ export function TokenCreationForm() {
         env.NETWORK as NetworkType
       );
 
-      console.log('Token creation successful:', result);
+      // 4. Create metadata
+      try {
+        const mintAddress = new PublicKey(result.mintAddress);
+        console.log('Creating metadata for mint:', mintAddress.toString());
+        
+        await createTokenMetadata(
+          connection,
+          walletContext,
+          mintAddress,
+          {
+            name: data.name.trim(),
+            symbol: data.symbol.trim().toUpperCase(),
+            description: data.description || '',
+            image: data.logoFile,
+            externalUrl: data.website || '',
+            sellerFeeBasisPoints: 0,
+          }
+        );
+        
+        console.log('Metadata creation successful');
+      } catch (metadataError) {
+        console.error('Detailed metadata creation error:', metadataError);
+        toast.warning("Token created successfully, but metadata creation failed. Your token will still work normally.");
+        // Continue with the process even if metadata creation fails
+      }
 
-      // 4. Save to database with completed payment status
+      // 5. Prepare database entry
       const memecoinData = {
-        name: tokenConfig.name,
-        symbol: tokenConfig.symbol,
-        decimals: tokenConfig.decimals,
-        totalSupply: tokenConfig.supply,
+        name: data.name.trim(),
+        symbol: data.symbol.trim().toUpperCase(),
+        decimals: Number(data.decimals),
+        totalSupply: String(data.supply),
         mintAddress: result.mintAddress,
         creatorAddress: walletContext.publicKey.toString(),
         priceInSol: priceInSol,
-        hasMintAuthority: tokenConfig.mintAuthority,
-        hasFreezeAuthority: tokenConfig.freezeAuthority,
-        hasUpdateAuthority: tokenConfig.updateAuthority,
-        network: env.NETWORK || 'devnet',
-        paymentStatus: 'completed', // Ensure this is being set
-        paymentTx: paymentResult.signature // Ensure this is being set
+        hasMintAuthority: Boolean(data.mintAuthority),
+        hasFreezeAuthority: Boolean(data.freezeAuthority),
+        hasUpdateAuthority: Boolean(data.updateAuthority),
+        network: env.NETWORK,
+        paymentStatus: 'completed',
+        paymentTx: paymentResult.signature,
+        description: data.description,
+        logoUrl: data.logoFile ? await uploadToIPFS(data.logoFile) : undefined,
+        socialLinks: {
+          website: data.website,
+          twitter: data.twitter,
+          telegram: data.telegram,
+          discord: data.discord,
+        }
       };
 
+      // 6. Save to database
       const dbResponse = await fetch('/api/memecoins', {
         method: 'POST',
         headers: {
@@ -248,51 +238,26 @@ export function TokenCreationForm() {
 
       if (!dbResponse.ok) {
         const errorData = await dbResponse.json();
+        console.error('Database save failed:', errorData);
         throw new Error(`Failed to save token to database: ${JSON.stringify(errorData)}`);
       }
 
-      // Log the response to verify
-      console.log('Database update response:', await dbResponse.json());
+      const dbResult = await dbResponse.json();
+      console.log('Database save successful:', dbResult);
 
-      const successData: TokenCreationSuccess = {
+      // 7. Set success state
+      setCreationSuccess({
         signature: result.signature,
         mintAddress: result.mintAddress,
         tokenAccount: result.tokenAccount,
         config: tokenConfig
-      };
-      
-      setCreationSuccess(successData);
-      
-      toast.success("Token Created Successfully!", {
-        duration: 10000,
-        description: (
-          <div className="space-y-2">
-            <p>Mint Address: {result.mintAddress.slice(0, 8)}...</p>
-            <button 
-              onClick={() => window.open(
-                `https://explorer.solana.com/address/${result.mintAddress}?cluster=${REQUIRED_ENV_VARS.NETWORK}`,
-                '_blank'
-              )}
-              className="text-sm text-blue-400 hover:text-blue-300"
-            >
-              View on Explorer →
-            </button>
-          </div>
-        )
       });
 
-    } catch (error: unknown) {
+      toast.success("Token Created Successfully!");
+
+    } catch (error) {
       console.error('Token creation error:', error);
-      console.error('Detailed error:', {
-        error,
-        env: process.env,
-        required: REQUIRED_ENV_VARS,
-      });
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      toast.error("Token Creation Failed", {
-        description: errorMessage
-      });
-      setCreationSuccess(null);
+      toast.error(error instanceof Error ? error.message : 'Failed to create token');
     } finally {
       setIsCreating(false);
     }

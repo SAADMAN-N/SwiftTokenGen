@@ -22,12 +22,15 @@ export function MemecoinsDisplay() {
     try {
       const response = await fetch('/api/memecoins');
       if (!response.ok) {
-        throw new Error('Failed to fetch memecoins');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch memecoins');
       }
       const data = await response.json();
       setMemecoins(data);
     } catch (error) {
       console.error('Failed to fetch memecoins:', error);
+      // Set empty array to prevent UI from breaking
+      setMemecoins([]);
     } finally {
       setLoading(false);
     }
