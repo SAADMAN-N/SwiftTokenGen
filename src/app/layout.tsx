@@ -1,6 +1,7 @@
 import { ClientLayout } from '@/components/layout/ClientLayout';
 import './globals.css';
 import { PromotionalBanner } from '@/components/ui/PromotionalBanner';
+import { Analytics } from '@vercel/analytics/next';
 
 export default function RootLayout({
   children,
@@ -13,6 +14,7 @@ export default function RootLayout({
         <PromotionalBanner />
         <ClientLayout>
           {children}
+          <Analytics />
         </ClientLayout>
       </body>
     </html>
