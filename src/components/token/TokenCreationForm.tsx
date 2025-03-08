@@ -62,6 +62,36 @@ const validateEnvironment = () => {
   };
 };
 
+async function confirmTransactionWithRetry(
+  connection: Connection,
+  signature: string,
+  blockhash: string,
+  lastValidBlockHeight: number,
+  maxRetries = 3
+): Promise<void> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const confirmation = await connection.confirmTransaction(
+        {
+          signature,
+          blockhash,
+          lastValidBlockHeight
+        },
+        'confirmed'
+      );
+      
+      if (confirmation.value.err) {
+        throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);
+      }
+      
+      return;
+    } catch (error) {
+      if (i === maxRetries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
+    }
+  }
+}
+
 export function TokenCreationForm() {
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState('');
@@ -141,7 +171,11 @@ export function TokenCreationForm() {
       }
 
       setIsCreating(true);
-      const connection = new Connection(env.RPC_URL, 'confirmed');
+      const connection = new Connection(env.RPC_URL, {
+        commitment: 'confirmed',
+        confirmTransactionInitialTimeout: 120000, // Increase to 120 seconds
+        wsEndpoint: env.RPC_URL.replace('https://', 'wss://'),  // Add WebSocket endpoint
+      });
       
       // Test RPC connection first
       const isConnected = await testRpcConnection(connection);
@@ -149,24 +183,27 @@ export function TokenCreationForm() {
         throw new Error('Failed to connect to Solana network. Please try again later.');
       }
 
-      // Update payment amount to promotional price
-      const paymentResult = await processPayment(walletContext, 0.2, connection);
+      // Define fixed price in SOL
+      const priceInSol = 0.2;  // Add this line
+
+      // Process payment
+      const paymentResult = await processPayment(walletContext, priceInSol, connection);
       if (!paymentResult.success || !paymentResult.signature) {
         throw new Error('Payment processing failed. Please try again.');
       }
 
-      // 2. Create token configuration
+      // Create token configuration
       const tokenConfig: TokenConfig = {
         name: data.name.trim(),
         symbol: data.symbol.trim().toUpperCase(),
-        decimals: data.decimals, // Should now be a number from the schema
-        supply: data.supply, // Should now be a number from the schema
+        decimals: data.decimals,
+        supply: data.supply,
         freezeAuthority: Boolean(data.freezeAuthority),
         mintAuthority: Boolean(data.mintAuthority),
         updateAuthority: Boolean(data.updateAuthority)
       };
 
-      // 3. Create token
+      // Create token
       const result = await createToken(
         walletContext,
         tokenConfig,
@@ -174,7 +211,18 @@ export function TokenCreationForm() {
         env.NETWORK as NetworkType
       );
 
-      // 4. Create metadata
+      // Wait for token creation confirmation
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+      
+      // Confirm with retry
+      await confirmTransactionWithRetry(
+        connection,
+        result.signature,
+        blockhash,
+        lastValidBlockHeight
+      );
+
+      // Create metadata
       try {
         const mintAddress = new PublicKey(result.mintAddress);
         console.log('Creating metadata for mint:', mintAddress.toString());
@@ -203,10 +251,9 @@ export function TokenCreationForm() {
       } catch (metadataError) {
         console.error('Detailed metadata creation error:', metadataError);
         toast.warning("Token created successfully, but metadata creation failed. Your token will still work normally.");
-        // Continue with the process even if metadata creation fails
       }
 
-      // 5. Prepare database entry
+      // Prepare database entry
       const memecoinData = {
         name: data.name.trim(),
         symbol: data.symbol.trim().toUpperCase(),
@@ -214,7 +261,7 @@ export function TokenCreationForm() {
         totalSupply: String(data.supply),
         mintAddress: result.mintAddress,
         creatorAddress: walletContext.publicKey.toString(),
-        priceInSol: priceInSol,
+        priceInSol,  // Use the defined price
         hasMintAuthority: Boolean(data.mintAuthority),
         hasFreezeAuthority: Boolean(data.freezeAuthority),
         hasUpdateAuthority: Boolean(data.updateAuthority),
@@ -231,7 +278,7 @@ export function TokenCreationForm() {
         }
       };
 
-      // 6. Save to database
+      // Save to database
       const dbResponse = await fetch('/api/memecoins', {
         method: 'POST',
         headers: {
@@ -241,15 +288,10 @@ export function TokenCreationForm() {
       });
 
       if (!dbResponse.ok) {
-        const errorData = await dbResponse.json();
-        console.error('Database save failed:', errorData);
-        throw new Error(`Failed to save token to database: ${JSON.stringify(errorData)}`);
+        throw new Error(`Failed to save token to database: ${await dbResponse.text()}`);
       }
 
-      const dbResult = await dbResponse.json();
-      console.log('Database save successful:', dbResult);
-
-      // 7. Set success state
+      // Set success state
       setCreationSuccess({
         signature: result.signature,
         mintAddress: result.mintAddress,
@@ -261,18 +303,7 @@ export function TokenCreationForm() {
 
     } catch (error) {
       console.error('Token creation error:', error);
-      
-      // More specific error messages
-      let errorMessage = 'Failed to create token';
-      if (error.message.includes('Wallet signing failed')) {
-        errorMessage = 'Please unlock your wallet and try again';
-      } else if (error.message.includes('insufficient funds')) {
-        errorMessage = 'Insufficient funds in your wallet';
-      } else if (error.message.includes('Failed to connect')) {
-        errorMessage = 'Network connection error. Please try again later';
-      }
-      
-      toast.error(errorMessage);
+      toast.error(error.message || 'Failed to create token. Please try again.');
     } finally {
       setIsCreating(false);
     }

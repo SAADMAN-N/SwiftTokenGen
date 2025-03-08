@@ -8,6 +8,7 @@ import { clusterApiUrl } from '@solana/web3.js';
 import { useMemo } from 'react';
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
+  // Change network to Devnet
   const network = WalletAdapterNetwork.Devnet;
   const endpoint = useMemo(() => clusterApiUrl(network), [network]);
   const wallets = useMemo(() => [new PhantomWalletAdapter()], []);

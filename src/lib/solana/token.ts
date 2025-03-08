@@ -26,6 +26,8 @@ export interface TokenCreationResult {
   signature: string;
   mintAddress: string;
   tokenAccount: string;
+  blockhash: string;
+  lastValidBlockHeight: number;
 }
 
 const CONFIRMATION_COMMITMENT = 'confirmed';
@@ -67,13 +69,16 @@ export async function createToken(
   wallet: WalletContextState,
   tokenConfig: TokenConfig,
   connection: Connection,
-  network: NetworkType = 'mainnet-beta'
+  network: NetworkType = 'devnet'
 ): Promise<TokenCreationResult> {
   if (!wallet.publicKey || !wallet.signTransaction) {
     throw new Error('Wallet not connected');
   }
 
   try {
+    // Get fresh blockhash once at the start
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+
     // 1. Build the base transaction
     const { transaction, mintKeypair } = await buildTokenCreateTransaction(
       wallet.publicKey,
@@ -108,46 +113,34 @@ export async function createToken(
       )
     );
 
-    // 5. Get fresh blockhash
-    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+    // Set transaction properties
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = wallet.publicKey;
 
-    // 6. Partial sign with mint account
+    // Sign the transaction with the mint account
     transaction.partialSign(mintKeypair);
 
-    // 7. Get wallet signature
+    // Get wallet signature
     const signedTx = await wallet.signTransaction(transaction);
 
-    // 8. Send and confirm transaction
+    // Send the transaction
     const signature = await connection.sendRawTransaction(signedTx.serialize(), {
       skipPreflight: false,
-      preflightCommitment: CONFIRMATION_COMMITMENT,
-      maxRetries: 3,
+      preflightCommitment: 'confirmed',
+      maxRetries: 5
     });
-    
-    // 9. Wait for confirmation
-    const confirmation = await connection.confirmTransaction({
-      signature,
-      blockhash,
-      lastValidBlockHeight
-    }, CONFIRMATION_COMMITMENT);
-
-    if (confirmation.value.err) {
-      throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);
-    }
 
     return {
       signature,
       mintAddress: mintKeypair.publicKey.toString(),
       tokenAccount: associatedTokenAccount.toString(),
+      blockhash,
+      lastValidBlockHeight
     };
 
-  } catch (error: unknown) {
+  } catch (error) {
     console.error('Error creating token:', error);
-    throw new Error(
-      `Failed to create token: ${error instanceof Error ? error.message : 'Unknown error occurred'}`
-    );
+    throw error;
   }
 }
 

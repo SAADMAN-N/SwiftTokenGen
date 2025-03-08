@@ -1,40 +1,16 @@
-import { Connection, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import type { WalletContextState } from '@solana/wallet-adapter-react';
-import { prisma } from '@/lib/prisma';
+import { 
+  Connection, 
+  SystemProgram, 
+  LAMPORTS_PER_SOL,
+  PublicKey,
+  clusterApiUrl,
+  Transaction
+} from '@solana/web3.js';
+import { createSolanaRpc, lamports } from '@solana/kit';
+import { WalletContextState } from '@solana/wallet-adapter-react';
 
-// Add environment variable check
-const MERCHANT_WALLET_ADDRESS = process.env.NEXT_PUBLIC_MERCHANT_WALLET_ADDRESS;
-if (!MERCHANT_WALLET_ADDRESS) {
-  throw new Error('NEXT_PUBLIC_MERCHANT_WALLET_ADDRESS environment variable is not set');
-}
-
-const merchantWallet = new PublicKey(MERCHANT_WALLET_ADDRESS);
-
-const MAX_RETRIES = 5;
-const CONFIRMATION_COMMITMENT = 'confirmed';
-
-// List of backup RPC endpoints
-const RPC_ENDPOINTS = [
-  'https://api.mainnet-beta.solana.com',
-  'https://solana-api.projectserum.com',
-  'https://rpc.ankr.com/solana',
-  'https://solana-mainnet.g.alchemy.com/v2/iZB3fRBFnVpOQnqsXBPL2aiI6griJWMf'
-];
-
-async function getWorkingConnection(): Promise<Connection> {
-  for (const endpoint of RPC_ENDPOINTS) {
-    try {
-      const connection = new Connection(endpoint, CONFIRMATION_COMMITMENT);
-      // Test the connection
-      await connection.getLatestBlockhash();
-      return connection;
-    } catch (error) {
-      console.warn(`RPC endpoint ${endpoint} failed, trying next one...`);
-      continue;
-    }
-  }
-  throw new Error('All RPC endpoints failed');
-}
+// Use the environment variable for merchant wallet
+const merchantWallet = new PublicKey(process.env.NEXT_PUBLIC_MERCHANT_WALLET_ADDRESS!);
 
 export async function processPayment(
   wallet: WalletContextState,
@@ -46,28 +22,42 @@ export async function processPayment(
   }
 
   try {
-    // Add version and fee payer explicitly
-    const transaction = new Transaction({ 
-      feePayer: wallet.publicKey,
-      recentBlockhash: (await connection.getLatestBlockhash()).blockhash
-    }).add(
-      SystemProgram.transfer({
-        fromPubkey: wallet.publicKey,
-        toPubkey: merchantWallet,
-        lamports: amountInSol * LAMPORTS_PER_SOL,
-      })
-    );
+    // Get latest blockhash
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
 
-    // Serialize and deserialize to ensure proper formatting
-    const serializedTx = transaction.serialize({ requireAllSignatures: false });
-    const deserializedTx = Transaction.from(serializedTx);
-    
-    const signed = await wallet.signTransaction(deserializedTx);
-    
-    const signature = await connection.sendRawTransaction(signed.serialize());
-    
-    const confirmation = await connection.confirmTransaction(signature);
-    
+    // Create instruction
+    const transferInstruction = SystemProgram.transfer({
+      fromPubkey: wallet.publicKey,
+      toPubkey: merchantWallet,
+      lamports: amountInSol * LAMPORTS_PER_SOL,
+    });
+
+    // Create transaction and add instruction
+    const transaction = new Transaction();
+    transaction.add(transferInstruction);
+
+    // Set the required transaction properties
+    transaction.feePayer = wallet.publicKey;
+    transaction.recentBlockhash = blockhash;
+    transaction.lastValidBlockHeight = lastValidBlockHeight;
+
+    // Sign transaction
+    const signed = await wallet.signTransaction(transaction);
+
+    // Send and confirm
+    const signature = await connection.sendRawTransaction(signed.serialize(), {
+      skipPreflight: false,
+      maxRetries: 3,
+      preflightCommitment: 'confirmed'
+    });
+
+    // Wait for confirmation
+    const confirmation = await connection.confirmTransaction({
+      signature,
+      blockhash,
+      lastValidBlockHeight
+    }, 'confirmed');
+
     if (confirmation.value.err) {
       throw new Error(`Transaction failed: ${confirmation.value.err.toString()}`);
     }
@@ -76,13 +66,37 @@ export async function processPayment(
       success: true,
       signature
     };
-  } catch (error) {
+
+  } catch (error: any) {
     console.error('Detailed payment error:', error);
     
     if (error.name === 'WalletSignTransactionError') {
-      throw new Error(`Wallet signing failed: ${error.message}. Please ensure your wallet is unlocked and try again.`);
+      throw new Error(`Wallet signing failed: ${error.message}`);
+    }
+    
+    if (error.message.includes('Blockhash not found')) {
+      throw new Error('Network congestion detected. Please try again.');
     }
     
     throw error;
   }
+}
+
+// Add a helper function to request devnet SOL
+export async function requestDevnetSol(
+  wallet: WalletContextState,
+  connection: Connection
+): Promise<string> {
+  if (!wallet.publicKey) {
+    throw new Error('Wallet not connected');
+  }
+
+  const rpc = createSolanaRpc(clusterApiUrl('devnet'));
+  const signature = await rpc.requestAirdrop(
+    wallet.publicKey.toBase58(),
+    lamports(2n * BigInt(LAMPORTS_PER_SOL))  // Request 2 SOL
+  ).send();
+
+  await connection.confirmTransaction(signature);
+  return signature;
 }
